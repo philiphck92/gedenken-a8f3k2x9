@@ -156,21 +156,19 @@
 
 <script>
   // ============================================
-  // HIER ANPASSEN: Fotos und Bildunterschriften
-  // Dateien müssen im gleichen Ordner wie diese
-  // HTML-Datei liegen (z.B. in einem Unterordner "fotos/")
+  // Fotos werden automatisch aus dem Ordner "fotos/"
+  // geladen (Dateien "foto1.jpeg", "foto2.jpeg", ...).
+  // Einfach neue Fotos in fortlaufender Nummerierung
+  // in den Ordner legen - keine manuelle Listenpflege
+  // nötig. Bildunterschriften können unten in
+  // captions[Nummer] ergänzt werden.
   // ============================================
-  const slides = [
-    { src: "fotos/foto1.jpeg", caption: "" },
-    { src: "fotos/foto2.jpeg", caption: "" },
-    { src: "fotos/foto3.jpeg", caption: "" },
-    { src: "fotos/foto4.jpeg", caption: "" },
-    { src: "fotos/foto5.jpeg", caption: "" },
-    { src: "fotos/foto6.jpeg", caption: "" },
-    { src: "fotos/foto7.jpeg", caption: "" },
-    { src: "fotos/foto8.jpeg", caption: "" },
-    { src: "fotos/foto9.jpeg", caption: "" }
-  ];
+  const captions = {
+    // 1: "Ein schöner Tag am See"
+  };
+
+  const maxPhotos = 200;        // obere Grenze für die Suche
+  const maxConsecutiveMisses = 5; // Suche stoppt nach so vielen Lücken in Folge
 
   const intervalSeconds = 5; // Sekunden pro Foto
   // ============================================
@@ -180,27 +178,54 @@
   const dotsEl = document.getElementById('dots');
   const playBtn = document.getElementById('playBtn');
 
+  let slides = [];
   let current = 0;
   let playing = true;
   let timer;
 
-  slides.forEach((slide, i) => {
-    const img = document.createElement('img');
-    img.src = slide.src;
-    img.alt = "Erinnerungsfoto " + (i + 1);
-    if (i === 0) img.classList.add('active');
-    container.appendChild(img);
+  function checkPhoto(src) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      img.src = src;
+    });
+  }
 
-    const dot = document.createElement('div');
-    dot.classList.add('dot');
-    if (i === 0) dot.classList.add('active');
-    dotsEl.appendChild(dot);
-  });
+  async function discoverSlides() {
+    const found = [];
+    let misses = 0;
+    for (let i = 1; i <= maxPhotos && misses < maxConsecutiveMisses; i++) {
+      const src = "fotos/foto" + i + ".jpeg";
+      const ok = await checkPhoto(src);
+      if (ok) {
+        found.push({ src, caption: captions[i] || "" });
+        misses = 0;
+      } else {
+        misses++;
+      }
+    }
+    return found;
+  }
 
-  const imgs = container.querySelectorAll('img');
-  const dots = dotsEl.querySelectorAll('.dot');
+  function renderSlides() {
+    slides.forEach((slide, i) => {
+      const img = document.createElement('img');
+      img.src = slide.src;
+      img.alt = "Erinnerungsfoto " + (i + 1);
+      if (i === 0) img.classList.add('active');
+      container.appendChild(img);
+
+      const dot = document.createElement('div');
+      dot.classList.add('dot');
+      if (i === 0) dot.classList.add('active');
+      dotsEl.appendChild(dot);
+    });
+  }
 
   function showSlide(index) {
+    const imgs = container.querySelectorAll('img');
+    const dots = dotsEl.querySelectorAll('.dot');
     imgs[current].classList.remove('active');
     dots[current].classList.remove('active');
     current = (index + slides.length) % slides.length;
@@ -220,6 +245,7 @@
   }
 
   function startTimer() {
+    if (slides.length < 2) return;
     timer = setInterval(() => showSlide(current + 1), intervalSeconds * 1000);
   }
 
@@ -238,8 +264,16 @@
     }
   }
 
-  captionEl.textContent = slides[0].caption || "";
-  startTimer();
+  discoverSlides().then((found) => {
+    slides = found;
+    if (slides.length === 0) {
+      captionEl.textContent = "Keine Fotos gefunden.";
+      return;
+    }
+    renderSlides();
+    captionEl.textContent = slides[0].caption || "";
+    startTimer();
+  });
 </script>
 
 </body>
