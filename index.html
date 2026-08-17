@@ -157,18 +157,23 @@
 <script>
   // ============================================
   // Fotos werden automatisch aus dem Ordner "fotos/"
-  // geladen (Dateien "foto1.jpeg", "foto2.jpeg", ...).
-  // Einfach neue Fotos in fortlaufender Nummerierung
-  // in den Ordner legen - keine manuelle Listenpflege
-  // nötig. Bildunterschriften können unten in
-  // captions[Nummer] ergänzt werden.
+  // geladen: ALLE Dateien mit Endung .jpg/.jpeg,
+  // unabhängig vom Dateinamen, alphabetisch sortiert.
+  // Einfach neue Fotos in den Ordner legen - keine
+  // manuelle Listenpflege nötig. Bildunterschriften
+  // können unten in captions["dateiname.jpeg"]
+  // ergänzt werden.
   // ============================================
+  const REPO_OWNER = "philiphck92";
+  const REPO_NAME = "gedenken-a8f3k2x9";
+  const PHOTOS_PATH = "fotos";
+
   const captions = {
-    // 1: "Ein schöner Tag am See"
+    // "foto1.jpeg": "Ein schöner Tag am See"
   };
 
-  const maxPhotos = 200;        // obere Grenze für die Suche
-  const maxConsecutiveMisses = 5; // Suche stoppt nach so vielen Lücken in Folge
+  const maxPhotos = 200;        // obere Grenze für die Fallback-Suche
+  const maxConsecutiveMisses = 5; // Fallback-Suche stoppt nach so vielen Lücken in Folge
 
   const intervalSeconds = 5; // Sekunden pro Foto
   // ============================================
@@ -183,6 +188,28 @@
   let playing = true;
   let timer;
 
+  function isJpeg(name) {
+    return /\.jpe?g$/i.test(name);
+  }
+
+  // Primäre Methode: Ordnerinhalt per GitHub-API abfragen.
+  // Findet JEDE .jpg/.jpeg-Datei, egal wie sie heißt.
+  async function discoverSlidesViaGitHub() {
+    const url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/contents/" + PHOTOS_PATH;
+    const res = await fetch(url, { headers: { Accept: "application/vnd.github+json" } });
+    if (!res.ok) throw new Error("GitHub API Fehler: " + res.status);
+    const items = await res.json();
+    const names = items
+      .filter((item) => item.type === "file" && isJpeg(item.name))
+      .map((item) => item.name)
+      .sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }));
+    if (names.length === 0) throw new Error("Keine JPEGs über GitHub-API gefunden");
+    return names.map((name) => ({
+      src: PHOTOS_PATH + "/" + encodeURIComponent(name),
+      caption: captions[name] || ""
+    }));
+  }
+
   function checkPhoto(src) {
     return new Promise((resolve) => {
       const img = new Image();
@@ -192,20 +219,32 @@
     });
   }
 
-  async function discoverSlides() {
+  // Fallback, falls die GitHub-API nicht erreichbar ist:
+  // probiert fotoN.jpeg der Reihe nach durch.
+  async function discoverSlidesByProbing() {
     const found = [];
     let misses = 0;
     for (let i = 1; i <= maxPhotos && misses < maxConsecutiveMisses; i++) {
-      const src = "fotos/foto" + i + ".jpeg";
+      const name = "foto" + i + ".jpeg";
+      const src = PHOTOS_PATH + "/" + name;
       const ok = await checkPhoto(src);
       if (ok) {
-        found.push({ src, caption: captions[i] || "" });
+        found.push({ src, caption: captions[name] || "" });
         misses = 0;
       } else {
         misses++;
       }
     }
     return found;
+  }
+
+  async function discoverSlides() {
+    try {
+      return await discoverSlidesViaGitHub();
+    } catch (err) {
+      console.warn("Foto-Erkennung über GitHub-API fehlgeschlagen, nutze Fallback:", err);
+      return discoverSlidesByProbing();
+    }
   }
 
   function renderSlides() {
