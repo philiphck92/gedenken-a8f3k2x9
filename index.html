@@ -202,7 +202,7 @@
     const names = items
       .filter((item) => item.type === "file" && isJpeg(item.name))
       .map((item) => item.name)
-      .sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }));
+      .sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base", numeric: true }));
     if (names.length === 0) throw new Error("Keine JPEGs über GitHub-API gefunden");
     return names.map((name) => ({
       src: PHOTOS_PATH + "/" + encodeURIComponent(name),
